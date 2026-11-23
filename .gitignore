@@ -1,0 +1,10 @@
+# Base de datos y datos procesados (se regeneran con scripts/)
+data/boccia.db
+data/processed/*
+!data/processed/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
