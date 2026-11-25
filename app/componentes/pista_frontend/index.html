@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Pista de boccia</title>
+<style>
+  :root { --fondo: transparent; }
+  html, body {
+    margin: 0; padding: 0; overflow: hidden; background: var(--fondo);
+    font-family: "Source Sans Pro", "Source Sans 3", system-ui, sans-serif;
+  }
+  .panel {
+    margin: 2px 2px 12px; padding: 10px; border-radius: 18px;
+    background: linear-gradient(180deg, #1C2838 0%, #111923 100%);
+    box-shadow: 0 10px 28px rgba(15, 25, 40, 0.28);
+  }
+  #lienzo { display: block; margin: 0 auto; touch-action: none; user-select: none; }
+
+  /* ── SVG ── */
+  text { text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .marco { fill: #0A1119; }
+  .linea { stroke: #fff; stroke-width: 4; fill: none; }
+  .linea-lanzamiento { stroke: #fff; stroke-width: 7; }
+  .rejilla { stroke: rgba(255, 255, 255, 0.42); stroke-width: 1.4; }
+  .rejilla-media { stroke: rgba(255, 255, 255, 0.3); stroke-width: 1.2; stroke-dasharray: 6 8; }
+  .box-R { fill: #C42B2B; fill-opacity: 0.86; }
+  .box-A { fill: #2350C0; fill-opacity: 0.86; }
+  .box-libre { fill: #0F1823; fill-opacity: 0.38; }
+  .num-box { font-size: 30px; font-weight: 800; fill: rgba(255, 255, 255, 0.88); }
+  .etiqueta { font-size: 22px; fill: #8FA3B8; }
+  .ayuda-fuera { font-size: 18px; fill: #6F8399; }
+  .zona-fuera { fill: rgba(255, 255, 255, 0.04); stroke: rgba(255, 255, 255, 0.24); stroke-width: 2; stroke-dasharray: 8 6; }
+  .celda { fill: rgba(255, 255, 255, 0.32); }
+  .hueco { fill: rgba(255, 255, 255, 0.1); stroke: rgba(255, 255, 255, 0.55); stroke-width: 1.5; stroke-dasharray: 4 3; }
+  .en-box .cuerpo-R, .en-box .cuerpo-A, .en-box .cuerpo-B { stroke: rgba(255, 255, 255, 0.85); stroke-width: 2; }
+
+  .zona-toque { fill: transparent; }
+  .cuerpo-B { stroke: #6d5b45; stroke-width: 1.5; }
+  .cuerpo-R, .cuerpo-A { stroke: rgba(0, 0, 0, 0.4); stroke-width: 1; }
+  .num { fill: #fff; font-weight: 800; }
+  .arrastrable { cursor: grab; }
+  .en-mano { filter: url(#sombraGrande); }
+  .inactiva { opacity: 0.6; }
+  .anillo-actual { fill: none; stroke: #F5B700; stroke-width: 5; animation: pulso 1.4s ease-in-out infinite; }
+  @keyframes pulso { 50% { stroke-opacity: 0.35; } }
+  .anillo-sel { fill: none; stroke: #fff; stroke-width: 3; stroke-dasharray: 6 4; }
+  .fantasma { fill: none; stroke: #fff; stroke-width: 2.5; stroke-dasharray: 5 4; }
+  .rastro { stroke: #fff; stroke-width: 2; stroke-dasharray: 4 5; }
+  .linea-diana { stroke: #fff; stroke-width: 3; stroke-dasharray: 1 7; stroke-linecap: round; }
+  .pildora { fill: rgba(10, 17, 25, 0.9); }
+  .txt-pildora { fill: #fff; font-size: 20px; font-weight: 700; }
+  svg.colocando .suelo-campo { cursor: crosshair; }
+</style>
+</head>
+<body>
+<div class="panel" id="panel">
+  <svg id="lienzo" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <!-- Parquet: tablas a lo largo de la pista -->
+      <pattern id="parquet" width="72" height="240" patternUnits="userSpaceOnUse">
+        <rect x="0" width="18" height="240" fill="#DDB57E"/>
+        <rect x="18" width="18" height="240" fill="#D6AC74"/>
+        <rect x="36" width="18" height="240" fill="#E0BA84"/>
+        <rect x="54" width="18" height="240" fill="#D3A86F"/>
+        <path d="M0 0V240M18 0V240M36 0V240M54 0V240" stroke="#8A6236" stroke-opacity="0.16" stroke-width="1"/>
+        <path d="M0 70H18M18 170H36M36 30H54M54 125H72" stroke="#8A6236" stroke-opacity="0.22" stroke-width="1"/>
+      </pattern>
+      <linearGradient id="brillo" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#fff" stop-opacity="0.18"/>
+        <stop offset="0.55" stop-color="#fff" stop-opacity="0"/>
+        <stop offset="1" stop-color="#000" stop-opacity="0.14"/>
+      </linearGradient>
+      <radialGradient id="gB" cx="35%" cy="30%" r="75%">
+        <stop offset="0" stop-color="#ffffff"/><stop offset="0.7" stop-color="#eeeeee"/><stop offset="1" stop-color="#c4c4c4"/>
+      </radialGradient>
+      <radialGradient id="gR" cx="35%" cy="30%" r="75%">
+        <stop offset="0" stop-color="#ff8080"/><stop offset="0.55" stop-color="#d62828"/><stop offset="1" stop-color="#8a1212"/>
+      </radialGradient>
+      <radialGradient id="gA" cx="35%" cy="30%" r="75%">
+        <stop offset="0" stop-color="#86b4ff"/><stop offset="0.55" stop-color="#1f4fc4"/><stop offset="1" stop-color="#0d266b"/>
+      </radialGradient>
+      <filter id="sombra" x="-60%" y="-60%" width="220%" height="220%">
+        <feDropShadow dx="2" dy="3" stdDeviation="2.5" flood-opacity="0.45"/>
+      </filter>
+      <filter id="sombraGrande" x="-100%" y="-100%" width="300%" height="300%">
+        <feDropShadow dx="5" dy="10" stdDeviation="6" flood-opacity="0.4"/>
+      </filter>
+      <!-- Halo de las bolas que puntúan -->
+      <radialGradient id="haloR">
+        <stop offset="0.5" stop-color="#FF3B3B" stop-opacity="0.95"/><stop offset="1" stop-color="#FF3B3B" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="haloA">
+        <stop offset="0.5" stop-color="#3D7BFF" stop-opacity="0.95"/><stop offset="1" stop-color="#3D7BFF" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <g id="pista"></g>
+    <g id="dinamico"></g>
+  </svg>
+</div>
+
+<script>
+"use strict";
+
+// ── Geometría ──────────────────────────────────────────────────────────────
+// Coordenadas del campo en metros, con el origen en la esquina izquierda de la
+// línea de lanzamiento (igual que zona_a_xy). En el SVG, 1 unidad = 1 cm y la
+// y crece hacia abajo: y_svg = (LARGO - y_campo) * 100.
+const ANCHO = 6, LARGO = 10, FONDO_BOX = 2.5;     // m
+const CM = 100;
+const R_BOLA = 17;                                  // radio dibujado (cm), exagerado para que se vea
+const UMBRAL_MOVIDA = 0.01;                         // m
+const FUERA = { y0: 10.18, y1: 10.82 };            // franja para las bolas fuera, tras la línea de fondo
+const VB = { x: -50, y: -88, w: 664, h: 1350 };     // viewBox (cm): solo lo justo alrededor de la pista
+const FILAS_BOX = [-0.95, -1.4, -1.85];             // y (m) de las filas de bolas dentro de un box
+const Y_BLANCA_BOX = -0.42;
+const NOMBRE = { B: "blanca", R: "roja", A: "azul" };
+
+const X = (m) => m * CM;
+const Y = (m) => (LARGO - m) * CM;
+
+// ── Estado ─────────────────────────────────────────────────────────────────
+// estado.bolas: bolas ya lanzadas {id, color, box, x, y, fuera}, tal como están ahora.
+// estado.base:  foto confirmada con el último «Siguiente» (para ver qué se ha movido).
+const estado = {
+  version: null, base: [], bolas: [], lanzada: null,
+  boxes: [], siguientes: {}, orden: 1, alto: 1000, rejilla: true,
+};
+const ui = { sel: null, drag: null };
+let clavePista = "";
+
+const svg = document.getElementById("lienzo");
+const panel = document.getElementById("panel");
+const gPista = document.getElementById("pista");
+const gDin = document.getElementById("dinamico");
+svg.setAttribute("viewBox", `${VB.x} ${VB.y} ${VB.w} ${VB.h}`);
+
+// ── Utilidades ─────────────────────────────────────────────────────────────
+const clonar = (o) => JSON.parse(JSON.stringify(o));
+const fmt = (v) => v.toFixed(2).replace(".", ",");
+const r2 = (v) => Math.round(v * 100) / 100;
+const dentroCampo = (p) => p.x >= 0 && p.x <= ANCHO && p.y >= 0 && p.y <= LARGO;
+const enBoxes = (p) => p.x >= 0 && p.x <= ANCHO && p.y < 0 && p.y >= -FONDO_BOX;
+const enFuera = (p) => p.x >= 0 && p.x <= ANCHO && p.y >= FUERA.y0 && p.y <= FUERA.y1;
+const blancaPendiente = () => estado.boxes.some((b) => b.blanca) && !estado.bolas.some((b) => b.id === "B");
+const puedeLanzar = () => !estado.lanzada && (blancaPendiente() || estado.boxes.some((b) => b.restantes > 0));
+
+/** (x, y) en metros -> código de zona, p. ej. (1.25, 3.5) -> "2I34". */
+function zona(x, y) {
+  if (x == null || y == null || !dentroCampo({ x, y })) return "F";
+  const col = Math.min(Math.floor(x), ANCHO - 1) + 1;
+  const lado = x - (col - 1) < 0.5 ? "I" : "D";
+  const ini = Math.min(Math.floor(y), LARGO - 1);
+  return `${col}${lado}${ini}${ini + 1}`;
+}
+
+/** Esquina inferior izquierda (m) de la celda de la rejilla (0,5 x 1 m) que contiene p. */
+function celda(p) {
+  return { x: Math.min(Math.floor(p.x * 2), 2 * ANCHO - 1) / 2, y: Math.min(Math.floor(p.y), LARGO - 1) };
+}
+
+function aCampo(ev) {
+  const pt = svg.createSVGPoint();
+  pt.x = ev.clientX; pt.y = ev.clientY;
+  const s = pt.matrixTransform(svg.getScreenCTM().inverse());
+  return { x: s.x / CM, y: LARGO - s.y / CM };
+}
+
+/** Bolas tal como se ven ahora mismo, incluida la que se está arrastrando. */
+function visibles() {
+  const d = ui.drag && ui.drag.movida ? ui.drag : null;
+  const lista = estado.bolas.map((b) => {
+    if (!d || d.id !== b.id) return b;
+    return dentroCampo(d.p) ? { ...b, x: d.p.x, y: d.p.y, fuera: false } : { ...b, fuera: true };
+  });
+  if (d && d.origen === "box" && dentroCampo(d.p)) {
+    lista.push({ id: d.id, color: d.color, box: d.box, x: d.p.x, y: d.p.y, fuera: false });
+  }
+  return lista;
+}
+
+/** Puntuación provisional del parcial: puntúa el color más cercano a la blanca,
+ *  una por cada bola más cercana que la mejor bola contraria. */
+function puntuacion(lista) {
+  const res = { R: 0, A: 0, ids: [] };
+  const blanca = lista.find((b) => b.id === "B" && !b.fuera);
+  if (!blanca) return res;
+  const d = lista.filter((b) => b.color !== "B" && !b.fuera)
+    .map((b) => ({ b, d: Math.hypot(b.x - blanca.x, b.y - blanca.y) }));
+  const minimo = (c) => Math.min(Infinity, ...d.filter((o) => o.b.color === c).map((o) => o.d));
+  const dr = minimo("R"), da = minimo("A");
+  if (dr === Infinity && da === Infinity) return res;
+  const EPS = 0.005;
+  if (Math.abs(dr - da) <= EPS) {                // empate: punto para cada bola equidistante
+    for (const o of d) if (Math.abs(o.d - dr) <= EPS) { res[o.b.color]++; res.ids.push(o.b.id); }
+    return res;
+  }
+  const gana = dr < da ? "R" : "A", limite = Math.max(dr, da);
+  for (const o of d) if (o.b.color === gana && o.d < limite - EPS) { res[gana]++; res.ids.push(o.b.id); }
+  return res;
+}
+
+function distanciaBlanca(lista, b) {
+  const blanca = lista.find((x) => x.id === "B" && !x.fuera);
+  if (!blanca || !b || b.id === "B" || b.fuera) return null;
+  return Math.hypot(b.x - blanca.x, b.y - blanca.y);
+}
+
+// ── Comunicación con Streamlit (protocolo de componentes v1, sin librerías) ──
+const enIframe = window.parent !== window;
+function enviar(type, datos = {}) {
+  if (enIframe) window.parent.postMessage({ isStreamlitMessage: true, type, ...datos }, "*");
+}
+
+function comunicar() {
+  const pts = puntuacion(estado.bolas);
+  const bolas = estado.bolas.map((b) => {
+    const dist = distanciaBlanca(estado.bolas, b);
+    return {
+      id: b.id, color: b.color, box: b.box ?? null, x: b.x, y: b.y, fuera: b.fuera,
+      zona: b.fuera ? "F" : zona(b.x, b.y), dist: dist == null ? null : r2(dist),
+    };
+  });
+  enviar("streamlit:setComponentValue", {
+    value: { version: estado.version, lanzada: estado.lanzada, bolas, puntos: { R: pts.R, A: pts.A } },
+    dataType: "json",
+  });
+}
+
+function recibir(a) {
+  estado.boxes = a.boxes || [];
+  estado.siguientes = a.siguientes || {};
+  estado.orden = a.orden || 1;
+  estado.base = a.base || [];
+  estado.rejilla = a.rejilla !== false;
+  if (a.alto) estado.alto = a.alto;
+  // Solo se reinicia el estado local cuando Python cambia la versión
+  // (Siguiente, Cancelar, Reiniciar). El resto de reruns no pisan el arrastre.
+  if (a.version !== estado.version) {
+    estado.version = a.version;
+    estado.bolas = clonar(a.trabajo || []);
+    estado.lanzada = a.lanzada || null;
+    ui.sel = null;
+    ui.drag = null;
+  }
+  const clave = JSON.stringify([estado.rejilla, estado.boxes.map((b) => [b.color, b.diana])]);
+  if (clave !== clavePista) { clavePista = clave; dibujarPista(); }
+  dibujar();
+}
+
+window.addEventListener("message", (ev) => {
+  if (!ev.data || ev.data.type !== "streamlit:render") return;
+  const t = ev.data.theme;
+  if (t && t.backgroundColor) document.documentElement.style.setProperty("--fondo", t.backgroundColor);
+  recibir(ev.data.args || {});
+});
+
+// ── Pista (parte estática) ─────────────────────────────────────────────────
+function dibujarPista() {
+  const p = [];
+  const altoTotal = (LARGO + FONDO_BOX) * CM;
+
+  // Marco, suelo de parquet y brillo.
+  p.push(`<rect class="marco" x="-8" y="${Y(LARGO) - 8}" width="${X(ANCHO) + 16}" height="${altoTotal + 16}" rx="8"/>`);
+  p.push(`<rect class="suelo-campo" x="0" y="${Y(LARGO)}" width="${X(ANCHO)}" height="${altoTotal}" fill="url(#parquet)"/>`);
+  p.push(`<rect x="0" y="${Y(LARGO)}" width="${X(ANCHO)}" height="${altoTotal}" fill="url(#brillo)" pointer-events="none"/>`);
+
+  // Boxes con el color de cada lado.
+  for (const b of estado.boxes) {
+    const x = (b.numero - 1) * CM;
+    const cls = b.color ? `box-${b.color}` : "box-libre";
+    p.push(`<rect class="${cls}" x="${x}" y="${Y(0)}" width="${CM}" height="${FONDO_BOX * CM}"/>`);
+    p.push(`<text class="num-box" x="${x + CM / 2}" y="${Y(-2.24)}">${b.numero}</text>`);
+  }
+
+  // Rejilla de zonas: columnas de 1 m (continuas), medias columnas (discontinuas), franjas de 1 m.
+  if (estado.rejilla) {
+    for (let i = 1; i < 2 * ANCHO; i++) {
+      const cls = i % 2 === 0 ? "rejilla" : "rejilla-media";
+      p.push(`<line class="${cls}" x1="${X(i / 2)}" y1="${Y(0)}" x2="${X(i / 2)}" y2="${Y(LARGO)}"/>`);
+    }
+    for (let y = 1; y < LARGO; y++) {
+      p.push(`<line class="rejilla" x1="0" y1="${Y(y)}" x2="${X(ANCHO)}" y2="${Y(y)}"/>`);
+    }
+  }
+
+  // Líneas: separación de boxes, contorno, línea de lanzamiento y cruz.
+  for (let i = 1; i < ANCHO; i++) {
+    p.push(`<line class="linea" x1="${X(i)}" y1="${Y(0)}" x2="${X(i)}" y2="${Y(-FONDO_BOX)}"/>`);
+  }
+  p.push(`<rect class="linea" x="0" y="${Y(LARGO)}" width="${X(ANCHO)}" height="${altoTotal}"/>`);
+  p.push(`<line class="linea-lanzamiento" x1="0" y1="${Y(0)}" x2="${X(ANCHO)}" y2="${Y(0)}"/>`);
+  const c = { x: 3, y: 3.75 }, brazo = 16;
+  p.push(`<path class="linea" d="M${X(c.x) - brazo} ${Y(c.y)} H${X(c.x) + brazo} M${X(c.x)} ${Y(c.y) - brazo} V${Y(c.y) + brazo}"/>`);
+
+  // Etiquetas de las franjas (01, 12, ..., 910) y «F» (fuera) junto a su franja.
+  for (let y = 0; y < LARGO; y++) {
+    p.push(`<text class="etiqueta" x="-26" y="${Y(y + 0.5)}">${y}${y + 1}</text>`);
+  }
+  p.push(`<text class="etiqueta" x="-26" y="${Y((FUERA.y0 + FUERA.y1) / 2)}">F</text>`);
+
+  // Franja para las bolas fuera.
+  p.push(`<rect class="zona-fuera" x="0" y="${Y(FUERA.y1)}" width="${X(ANCHO)}" height="${(FUERA.y1 - FUERA.y0) * CM}" rx="12"/>`);
+
+  gPista.innerHTML = p.join("");
+}
+
+// ── Bolas (parte dinámica) ─────────────────────────────────────────────────
+function bola(b, cx, cy, { origen, arrastrable = false, box = null, slot = null, numero = true } = {}) {
+  const clases = ["bola"];
+  if (origen === "mano") clases.push("en-mano");
+  if (arrastrable) clases.push("arrastrable");
+  if (origen === "box") clases.push(arrastrable ? "en-box" : "en-box inactiva");
+  const datos = arrastrable
+    ? `data-bola="${b.id}" data-color="${b.color}" data-origen="${origen}" data-box="${box ?? ""}" data-slot="${slot ?? ""}"`
+    : "";
+  const r = R_BOLA;
+  const anillos = [];
+  if (b.id === estado.lanzada && origen !== "box") anillos.push(`<circle class="anillo-actual" r="${r + 7}"/>`);
+  const s = ui.sel;
+  if (s && s.id === b.id && s.origen === origen && (origen !== "box" || (s.box === box && s.slot === slot))) {
+    anillos.push(`<circle class="anillo-sel" r="${r + 7 + 7 * anillos.length}"/>`);
+  }
+  const txt = b.color === "B" || !numero ? "" : `<text class="num" font-size="${Math.round(r * 1.1)}">${b.id.slice(1)}</text>`;
+  return `<g class="${clases.join(" ")}" ${datos} transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)})">` +
+    `<circle class="zona-toque" r="${r + 14}"/>${anillos.join("")}` +
+    `<circle class="cuerpo-${b.color}" r="${r}" fill="url(#g${b.color})" filter="url(#sombra)"/>${txt}</g>`;
+}
+
+function huecosBox(bx) {
+  const x0 = (bx.numero - 1) * CM;
+  const cols = bx.cupo > 3 ? [30, 70] : [50];
+  return Array.from({ length: bx.cupo }, (_, i) => ({
+    x: x0 + cols[i % cols.length],
+    y: Y(FILAS_BOX[Math.floor(i / cols.length)]),
+  }));
+}
+
+function bolasEnBoxes(d) {
+  const p = [];
+  const puede = puedeLanzar(), soloBlanca = blancaPendiente();
+  const lanzada = estado.bolas.find((b) => b.id === estado.lanzada);
+  for (const bx of estado.boxes) {
+    const x0 = (bx.numero - 1) * CM;
+    if (bx.diana) {
+      const cx = x0 + CM / 2, cy = Y(Y_BLANCA_BOX);
+      p.push(`<circle class="hueco" cx="${cx}" cy="${cy}" r="${R_BOLA + 3}"/>`);
+      const enMano = d && d.id === "B";
+      if (bx.blanca && !estado.bolas.some((b) => b.id === "B") && !enMano) {
+        p.push(bola({ id: "B", color: "B" }, cx, cy, { origen: "box", arrastrable: puede, box: bx.numero, slot: -1 }));
+      }
+    }
+    if (!bx.color) continue;
+    let quedan = bx.restantes;
+    if (lanzada && lanzada.box === bx.numero && lanzada.color === bx.color) quedan -= 1;
+    if (d && d.origen === "box" && d.box === bx.numero && d.color === bx.color) quedan -= 1;
+    const id = estado.siguientes[bx.color];
+    const activa = puede && !soloBlanca && !!id;
+    huecosBox(bx).forEach((h, i) => {
+      p.push(`<circle class="hueco" cx="${h.x}" cy="${h.y}" r="${R_BOLA + 3}"/>`);
+      if (i < quedan) {
+        p.push(bola({ id: id || "", color: bx.color }, h.x, h.y,
+          { origen: "box", arrastrable: activa, box: bx.numero, slot: i, numero: false }));
+      }
+    });
+  }
+  return p;
+}
+
+function pildora(q, texto) {
+  const w = texto.length * 11 + 26;
+  return `<g transform="translate(${X(q.x).toFixed(1)} ${(Y(q.y) - R_BOLA - 30).toFixed(1)})" pointer-events="none">` +
+    `<rect class="pildora" x="${-w / 2}" y="-17" width="${w}" height="34" rx="17"/>` +
+    `<text class="txt-pildora">${texto}</text></g>`;
+}
+
+/** Bola de la que se muestra la distancia a la blanca: la que se arrastra, la seleccionada o la lanzada. */
+function bolaFoco(vis, d) {
+  if (d) return vis.find((b) => b.id === d.id && !b.fuera) || null;
+  const id = ui.sel && ui.sel.origen !== "box" ? ui.sel.id : estado.lanzada;
+  return vis.find((b) => b.id === id && !b.fuera) || null;
+}
+
+function dibujar() {
+  const d = ui.drag && ui.drag.movida ? ui.drag : null;
+  const vis = visibles();
+  const pts = puntuacion(vis);
+  const blanca = vis.find((b) => b.id === "B" && !b.fuera);
+  const p = [];
+
+  // Celda de la rejilla bajo la bola que se arrastra.
+  if (d && dentroCampo(d.p)) {
+    const c = celda(d.p);
+    p.push(`<rect class="celda" x="${X(c.x)}" y="${Y(c.y + 1)}" width="${0.5 * CM}" height="${CM}"/>`);
+  }
+
+  // Halo en las bolas que puntúan ahora mismo.
+  for (const b of vis) {
+    if (pts.ids.includes(b.id)) p.push(`<circle fill="url(#halo${b.color})" cx="${X(b.x)}" cy="${Y(b.y)}" r="${R_BOLA + 17}"/>`);
+  }
+
+  // Posición anterior de las bolas desplazadas en este lanzamiento.
+  const base = new Map(estado.base.map((b) => [b.id, b]));
+  for (const b of vis) {
+    const antes = base.get(b.id);
+    if (!antes || antes.fuera) continue;
+    const ahora = b.fuera ? null : b;
+    if (ahora && Math.hypot(ahora.x - antes.x, ahora.y - antes.y) <= UMBRAL_MOVIDA) continue;
+    if (ahora) p.push(`<line class="rastro" x1="${X(antes.x)}" y1="${Y(antes.y)}" x2="${X(ahora.x)}" y2="${Y(ahora.y)}"/>`);
+    p.push(`<circle class="fantasma" cx="${X(antes.x)}" cy="${Y(antes.y)}" r="${R_BOLA}"/>`);
+  }
+
+  // Distancia a la blanca.
+  const foco = bolaFoco(vis, d);
+  if (foco && blanca && foco.id !== "B") {
+    p.push(`<line class="linea-diana" x1="${X(foco.x)}" y1="${Y(foco.y)}" x2="${X(blanca.x)}" y2="${Y(blanca.y)}"/>`);
+  }
+
+  // Bolas en el campo (la blanca primero, debajo).
+  const enCampo = vis.filter((b) => !b.fuera && !(d && d.id === b.id))
+    .sort((a, b) => (a.id === "B" ? -1 : b.id === "B" ? 1 : 0));
+  for (const b of enCampo) p.push(bola(b, X(b.x), Y(b.y), { origen: "campo", arrastrable: true }));
+
+  p.push(...bolasEnBoxes(d));
+
+  // Bolas fuera.
+  const fuera = estado.bolas.filter((b) => b.fuera && !(d && d.id === b.id));
+  const yFuera = Y((FUERA.y0 + FUERA.y1) / 2);
+  fuera.forEach((b, i) => p.push(bola(b, 34 + i * 44, yFuera, { origen: "fuera", arrastrable: true })));
+  if (!fuera.length) {
+    p.push(`<text class="ayuda-fuera" x="${X(ANCHO / 2)}" y="${yFuera}">Arrastra aquí las bolas que salgan del campo</text>`);
+  }
+
+  // Bola que se está arrastrando, encima de todo.
+  if (d) {
+    p.push(bola({ id: d.id, color: d.color }, X(d.p.x), Y(d.p.y), { origen: "mano" }));
+    let texto = enBoxes(d.p) && d.origen === "box" ? "Soltar: cancelar" : "Fuera";
+    if (dentroCampo(d.p)) {
+      const dist = distanciaBlanca(vis, foco);
+      texto = zona(d.p.x, d.p.y) + (dist == null ? "" : ` · ${fmt(dist)} m`);
+    }
+    p.push(pildora(d.p, texto));
+  } else if (foco && blanca && foco.id !== "B") {
+    p.push(pildora(foco, `${fmt(distanciaBlanca(vis, foco))} m`));
+  }
+
+  gDin.innerHTML = p.join("");
+  svg.classList.toggle("colocando", !!ui.sel);
+  ajustarTamano();
+}
+
+/** Alto máximo de la pista: el pedido por Python, recortado para que quepa en la ventana. */
+function altoMaximo() {
+  let alto = estado.alto;
+  try {
+    const vh = window.parent.innerHeight;     // misma web que Streamlit: se puede leer
+    if (vh) alto = Math.min(alto, Math.max(520, vh - 140));
+  } catch (e) { /* sin acceso a la ventana padre: se usa el alto pedido */ }
+  return alto;
+}
+
+let ultimaAltura = 0;
+function ajustarTamano() {
+  const ancho = Math.max(200, panel.clientWidth - 20);
+  const alto = Math.round(Math.min(altoMaximo(), (ancho * VB.h) / VB.w));
+  svg.setAttribute("width", Math.round((alto * VB.w) / VB.h));
+  svg.setAttribute("height", alto);
+  const total = Math.ceil(panel.getBoundingClientRect().height) + 16;
+  if (total !== ultimaAltura) {
+    ultimaAltura = total;
+    enviar("streamlit:setFrameHeight", { height: total });
+  }
+}
+window.addEventListener("resize", ajustarTamano);
+try { window.parent.addEventListener("resize", ajustarTamano); } catch (e) { /* ver altoMaximo */ }
+
+// ── Interacción: clic y arrastre ───────────────────────────────────────────
+function colocar(id, color, q, box) {
+  let b = estado.bolas.find((x) => x.id === id);
+  if (!b) {                       // sale de un box: es el lanzamiento de este turno
+    b = { id, color, box: box ?? null };
+    estado.bolas.push(b);
+    estado.lanzada = id;
+  }
+  const dentro = dentroCampo(q);
+  b.fuera = !dentro;
+  b.x = dentro ? r2(q.x) : null;
+  b.y = dentro ? r2(q.y) : null;
+  ui.sel = null;
+  dibujar();
+  comunicar();
+}
+
+const numeroONull = (v) => (v === "" || v == null ? null : Number(v));
+
+svg.addEventListener("pointerdown", (ev) => {
+  const el = ev.target.closest("[data-bola]");
+  const q = aCampo(ev);
+  if (el) {
+    ui.drag = {
+      id: el.dataset.bola, color: el.dataset.color, origen: el.dataset.origen,
+      box: numeroONull(el.dataset.box), slot: numeroONull(el.dataset.slot),
+      x0: ev.clientX, y0: ev.clientY, p: q, movida: false,
+    };
+    svg.setPointerCapture(ev.pointerId);
+    ev.preventDefault();
+    return;
+  }
+  // Clic en vacío con una bola seleccionada: se coloca ahí (o fuera, si es en la franja «Fuera»).
+  if (ui.sel && (dentroCampo(q) || enFuera(q))) {
+    colocar(ui.sel.id, ui.sel.color, q, ui.sel.box);
+  } else if (ui.sel) {
+    ui.sel = null;
+    dibujar();
+  }
+});
+
+svg.addEventListener("pointermove", (ev) => {
+  const d = ui.drag;
+  if (!d) return;
+  if (!d.movida && Math.hypot(ev.clientX - d.x0, ev.clientY - d.y0) < 4) return;
+  d.movida = true;
+  d.p = aCampo(ev);
+  dibujar();
+});
+
+svg.addEventListener("pointerup", (ev) => {
+  const d = ui.drag;
+  if (!d) return;
+  ui.drag = null;
+  if (!d.movida) {                // clic sin arrastrar: seleccionar / deseleccionar
+    const misma = ui.sel && ui.sel.id === d.id && ui.sel.origen === d.origen && ui.sel.slot === d.slot;
+    ui.sel = misma ? null : { id: d.id, color: d.color, origen: d.origen, box: d.box, slot: d.slot };
+    dibujar();
+    return;
+  }
+  const q = aCampo(ev);
+  if (d.origen === "box" && enBoxes(q)) {   // devuelta a los boxes: no cuenta
+    dibujar();
+    return;
+  }
+  colocar(d.id, d.color, q, d.box);
+});
+
+svg.addEventListener("pointercancel", () => { ui.drag = null; dibujar(); });
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") { ui.sel = null; ui.drag = null; dibujar(); }
+});
+
+// ── Arranque ───────────────────────────────────────────────────────────────
+if (enIframe) {
+  enviar("streamlit:componentReady", { apiVersion: 1 });
+} else {
+  // Abierto directamente en el navegador: datos de ejemplo para desarrollar el dibujo.
+  const demo = [
+    { id: "B", color: "B", box: 3, x: 3.1, y: 4.2, fuera: false },
+    { id: "R1", color: "R", box: 3, x: 2.85, y: 3.95, fuera: false },
+    { id: "A1", color: "A", box: 4, x: 3.5, y: 4.6, fuera: false },
+  ];
+  const boxes = [1, 2, 3, 4, 5, 6].map((n) => ({
+    numero: n, color: n === 3 ? "R" : n === 4 ? "A" : null, cupo: n === 3 || n === 4 ? 6 : 0,
+    restantes: n === 3 || n === 4 ? 5 : 0, diana: n === 3, blanca: false,
+  }));
+  recibir({ version: 0, base: demo, trabajo: demo, lanzada: null, orden: 4, alto: 1000,
+    boxes, siguientes: { R: "R2", A: "A2" }, rejilla: true });
+}
+</script>
+</body>
+</html>

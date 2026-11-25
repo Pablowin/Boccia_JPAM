@@ -1,0 +1,20 @@
+[theme]
+base = "light"
+primaryColor = "#0F2742"
+backgroundColor = "#F3F5F8"
+secondaryBackgroundColor = "#E9EDF2"
+textColor = "#16202B"
+borderColor = "#DCE2EA"
+baseRadius = "0.6rem"
+redColor = "#D62828"
+blueColor = "#1F4FC4"
+headingFontWeights = [800, 700]
+
+[theme.sidebar]
+backgroundColor = "#0F1E33"
+secondaryBackgroundColor = "#1A2C47"
+textColor = "#D6E0EC"
+borderColor = "#22385A"
+
+[client]
+toolbarMode = "minimal"
