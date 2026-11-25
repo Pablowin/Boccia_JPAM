@@ -1,5 +1,5 @@
 # Base de datos y datos procesados (se regeneran con scripts/)
-data/boccia.db
+data/boccia.db*
 data/processed/*
 !data/processed/.gitkeep
 
